@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -26,7 +26,7 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _fs = FirebaseFirestore.instance;
+  final FirebaseDatabase _db = FirebaseDatabase.instance;
 
   GoogleMapController? _mapController;
   final Map<String, Marker> _otherMarkers = {};
@@ -34,7 +34,7 @@ class _MapScreenState extends State<MapScreen> {
   Marker? _pickedMarker;
 
   StreamSubscription<Position>? _positionSub;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _locationsSub;
+  StreamSubscription<DatabaseEvent>? _locationsSub;
   Timer? _throttleTimer;
 
   static const CameraPosition _initialCam = CameraPosition(
@@ -127,7 +127,7 @@ class _MapScreenState extends State<MapScreen> {
     );
 
     try {
-      final p = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.best);
+      final p = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.best));
       _onPosition(p, animate: true);
     } catch (_) {}
   }
@@ -157,46 +157,52 @@ class _MapScreenState extends State<MapScreen> {
     if (_throttleTimer?.isActive ?? false) return;
     _throttleTimer = Timer(const Duration(seconds: 5), () {});
 
-    final userDoc = await _fs.collection('users').doc(uid).get();
-    final userRole = userDoc.data()?['role'] ?? 'unknown';
+    final userSnap = await _db.ref('users/$uid').get();
+    final userRole = userSnap.exists && userSnap.value is Map
+        ? (userSnap.value as Map)['role'] ?? 'unknown'
+        : 'unknown';
 
     try {
-      await _fs.collection('locations').doc(uid).set({
+      await _db.ref('locations/$uid').set({
         'uid': uid,
         'role': userRole,
         'lat': lat,
         'lng': lng,
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+        'updatedAt': ServerValue.timestamp,
+      });
     } catch (_) {}
   }
 
   Future<void> _listenToOtherLocations() async {
     final uid = _auth.currentUser?.uid;
 
-    _locationsSub = _fs.collection('locations').snapshots().listen((QuerySnapshot snap) {
+    _locationsSub = _db.ref('locations').onValue.listen((DatabaseEvent event) {
+      final snap = event.snapshot;
+      final val = snap.value;
       final Map<String, Marker> newMarkers = {};
 
-      for (final doc in snap.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        final docUid = data['uid'] as String? ?? doc.id;
+      if (val is Map) {
+        for (final e in val.entries) {
+          final docUid = e.key.toString();
+          if (docUid == uid) continue;
+          final data = e.value;
+          if (data is! Map) continue;
+          final m = Map<String, dynamic>.from(Map<dynamic, dynamic>.from(data));
+          final lat = (m['lat'] as num?)?.toDouble();
+          final lng = (m['lng'] as num?)?.toDouble();
+          final role = m['role'] as String? ?? 'unknown';
 
-        if (docUid == uid) continue;
+          if (lat == null || lng == null) continue;
 
-        final lat = (data['lat'] as num?)?.toDouble();
-        final lng = (data['lng'] as num?)?.toDouble();
-        final role = data['role'] as String? ?? 'unknown';
+          final marker = Marker(
+            markerId: MarkerId(docUid),
+            position: LatLng(lat, lng),
+            infoWindow: InfoWindow(title: role.toUpperCase(), snippet: m['manualAddress'] ?? ''),
+            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+          );
 
-        if (lat == null || lng == null) continue;
-
-        final marker = Marker(
-          markerId: MarkerId(docUid),
-          position: LatLng(lat, lng),
-          infoWindow: InfoWindow(title: role.toUpperCase(), snippet: data['manualAddress'] ?? ''),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-        );
-
-        newMarkers[docUid] = marker;
+          newMarkers[docUid] = marker;
+        }
       }
 
       setState(() {

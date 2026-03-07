@@ -1,8 +1,8 @@
 // lib/start_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 
 import 'login_screen.dart';
 import 'donor_home.dart';
@@ -55,8 +55,8 @@ class _StartScreenState extends State<StartScreen> {
     setState(() => _checking = true);
 
     try {
-      final snap = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-      final roleStr = snap.data()?['role'] as String?;
+      final snap = await FirebaseDatabase.instance.ref('users/${user.uid}').get();
+      final roleStr = snap.exists ? ((snap.value as Map?)?['role'] as String?) : null;
       if (!mounted) return;
 
       if (roleStr == 'ngo') {
@@ -90,7 +90,7 @@ class _StartScreenState extends State<StartScreen> {
         height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color.fromARGB(255, 110, 201, 228), Color.fromARGB(255, 37, 180, 252)],
+            colors: [Color.fromARGB(255, 112, 173, 213),Color.fromARGB(255, 65, 195, 255)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -204,7 +204,7 @@ class _StartScreenState extends State<StartScreen> {
                           padding: const EdgeInsets.only(top: 18.0),
                           child: Text(
                             'Version 1.0.0',
-                            style: TextStyle(color: Colors.white.withOpacity(0.85)),
+                            style: TextStyle(color: Colors.white.withValues(alpha: 0.85)),
                           ),
                         ),
                       ],

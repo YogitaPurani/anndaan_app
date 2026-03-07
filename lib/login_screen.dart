@@ -1,8 +1,7 @@
 // lib/login_screen.dart
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
+import 'package:firebase_database/firebase_database.dart';
 import 'services/auth_service.dart';
 import 'donor_home.dart';
 import 'ngo_home.dart';
@@ -36,8 +35,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _goToHomeFor(User user) async {
     try {
-      final snap = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-      final roleStr = snap.data()?['role'] as String?;
+      final snap = await FirebaseDatabase.instance.ref('users/${user.uid}').get();
+      final roleStr = snap.exists ? ((snap.value as Map?)?['role'] as String?) : null;
       final role = roleStr == 'ngo' ? Role.ngo : Role.donor;
 
       if (!mounted) return;
@@ -62,21 +61,22 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _saveUserRoleToFirestore(User user) async {
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+  Future<void> _saveUserRoleToRealtimeDb(User user) async {
+    await FirebaseDatabase.instance.ref('users/${user.uid}').set({
       'role': _selectedRole == Role.donor ? 'donor' : 'ngo',
       'email': user.email,
       'displayName': user.displayName,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      'updatedAt': ServerValue.timestamp,
+    });
   }
 
   void _setLoading(bool v) => setState(() => _loading = v);
 
   String? _validateEmail(String? v) {
     if (v == null || v.trim().isEmpty) return 'Email required';
-    if (!RegExp(r'^[\w\.\-]+@([\w\-]+\.)+[a-zA-Z]{2,}$').hasMatch(v.trim()))
+    if (!RegExp(r'^[\w\.\-]+@([\w\-]+\.)+[a-zA-Z]{2,}$').hasMatch(v.trim())) {
       return 'Enter a valid email';
+    }
     return null;
   }
 
@@ -104,7 +104,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final user = cred.user;
       if (user != null) {
-        await _saveUserRoleToFirestore(user);
+        if (!_isLogin) {
+          // Only save role on account creation, not on every login
+          await _saveUserRoleToRealtimeDb(user);
+        }
         await _goToHomeFor(user);
       }
     } on FirebaseAuthException catch (e) {
@@ -127,7 +130,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final user = cred.user;
       if (user != null) {
-        await _saveUserRoleToFirestore(user);
+        if (cred.additionalUserInfo?.isNewUser == true) {
+          // Only save role for brand new Google accounts
+          await _saveUserRoleToRealtimeDb(user);
+        }
         await _goToHomeFor(user);
       }
     } on FirebaseAuthException catch (e) {
@@ -329,7 +335,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           icon: Image.asset(
                             'assets/google_logo.png',
                             height: 20,
-                            errorBuilder: (_, __, ___) => const Icon(Icons.login),
+                            errorBuilder: (_, _, _) => const Icon(Icons.login),
                           ),
                           label: Text(_loading ? 'Please wait...' : 'Continue with Google'),
                         ),
