@@ -62,12 +62,17 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _saveUserRoleToRealtimeDb(User user) async {
+    final isNgo = _selectedRole == Role.ngo;
     await FirebaseDatabase.instance.ref('users/${user.uid}').set({
-      'role': _selectedRole == Role.donor ? 'donor' : 'ngo',
+      'role': isNgo ? 'ngo' : 'donor',
       'email': user.email,
       'displayName': user.displayName,
       'updatedAt': ServerValue.timestamp,
     });
+    // Keep a flat list of NGO UIDs so donors can broadcast notifications to all NGOs.
+    if (isNgo) {
+      await FirebaseDatabase.instance.ref('ngo_list/${user.uid}').set(true);
+    }
   }
 
   void _setLoading(bool v) => setState(() => _loading = v);

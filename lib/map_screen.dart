@@ -240,8 +240,9 @@ class _MapScreenState extends State<MapScreen> {
       final p = await placemarkFromCoordinates(pos.latitude, pos.longitude);
       if (p.isNotEmpty) {
         final pm = p.first;
-        addr = '${pm.street ?? ''}, ${pm.locality ?? ''}, ${pm.administrativeArea ?? ''}, ${pm.postalCode ?? ''}'
-            .replaceAll(RegExp(r'(^, |, ,)'), '');
+        addr = [pm.street, pm.subLocality ?? pm.locality, pm.administrativeArea]
+            .where((e) => e != null && e.trim().isNotEmpty)
+            .join(', ');
       }
     } catch (_) {}
 
@@ -298,7 +299,8 @@ class _MapScreenState extends State<MapScreen> {
             myLocationButtonEnabled: false, // disable default button
             markers: _buildMarkers(),
             zoomControlsEnabled: false,
-            onLongPress: _onMapLongPress,
+            onTap: widget.pickMode ? _onMapLongPress : null,
+            onLongPress: widget.pickMode ? _onMapLongPress : null,
             padding: const EdgeInsets.only(top: 50),
           ),
           Positioned(
@@ -328,6 +330,24 @@ class _MapScreenState extends State<MapScreen> {
               },
             ),
           ),
+          if (widget.pickMode)
+            Positioned(
+              top: 10,
+              left: 16,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  '📍 Tap anywhere on the map to pick a location',
+                  style: TextStyle(color: Colors.white, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
           if (widget.pickMode && _pickedMarker != null)
             Positioned(
               bottom: 20,

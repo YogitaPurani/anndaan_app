@@ -13,6 +13,8 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'map_screen.dart';
 import 'login_screen.dart';
 import 'services/auth_service.dart';
+import 'services/notification_service.dart';
+import 'widgets/notification_bell.dart';
 
 class DonorHomeScreen extends StatefulWidget {
   const DonorHomeScreen({super.key});
@@ -35,7 +37,6 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
   double _uploadProgress = 0.0;
 
   LatLng? _selectedLatLng;
-  String? _selectedAddress;
   bool _loadingLocation = false;
   DateTime? _pickupAt;
 
@@ -160,9 +161,7 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
           pm.street,
           pm.subLocality ?? pm.locality,
           pm.administrativeArea,
-          pm.postalCode
         ].where((e) => e != null && e.trim().isNotEmpty).join(', ');
-        _selectedAddress = address;
         _manualAddressCtrl.text = address;
       }
 
@@ -189,7 +188,6 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
 
       setState(() {
         _selectedLatLng = LatLng(lat, lng);
-        _selectedAddress = addr;
         if (addr != null) _manualAddressCtrl.text = addr;
       });
     }
@@ -234,7 +232,29 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
           'manualAddress': _manualAddressCtrl.text.trim(),
       };
 
-      await FirebaseDatabase.instance.ref('donations').push().set(data);
+      // Store title/qty before submit for use in NGO notifications.
+      final title = _titleCtrl.text.trim();
+      final qty = _qtyCtrl.text.trim();
+
+      // Push donation and capture its key for notifications.
+      final donationRef = FirebaseDatabase.instance.ref('donations').push();
+      await donationRef.set(data);
+      final donationId = donationRef.key;
+
+      // Notify all registered NGOs about the new donation.
+      final ngoSnap = await FirebaseDatabase.instance.ref('ngo_list').get();
+      if (ngoSnap.exists && ngoSnap.value is Map) {
+        await Future.wait([
+          for (final ngoUid in (ngoSnap.value as Map).keys)
+            NotificationService.notify(
+              uid: ngoUid.toString(),
+              type: 'new_donation',
+              title: '🍛 New Donation Available!',
+              body: '$title • $qty servings',
+              donationId: donationId,
+            ),
+        ]);
+      }
 
       if (!mounted) return;
 
@@ -244,7 +264,6 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
         _uploadProgress = 0.0;
         _imageFile = null;
         _selectedLatLng = null;
-        _selectedAddress = null;
       });
 
       // Reset form
@@ -416,24 +435,12 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
                       setState(() {
                         _selectedLatLng = null;
                         _manualAddressCtrl.clear();
-                        _selectedAddress = null;
                       });
                     },
                     icon: const Icon(Icons.close),
                   )
                 ],
               ),
-
-            if (_selectedAddress != null && _selectedAddress!.trim().isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Address: $_selectedAddress',
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
 
             TextFormField(
               controller: _manualAddressCtrl,
@@ -614,6 +621,7 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
+          automaticallyImplyLeading: false,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             tooltip: 'Back to Login',
@@ -625,7 +633,7 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
           ),
           title: const Text('AnnDaan',
               style: TextStyle(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color.fromARGB(255, 212, 226, 99),
+          backgroundColor: const Color.fromARGB(255, 101, 114, 225),
           foregroundColor: Colors.black87,
           bottom: const TabBar(
             tabs: [
@@ -643,6 +651,8 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
                           fontWeight: FontWeight.bold, color: Colors.black)),
                 ),
               ),
+            if (user != null)
+              NotificationBell(uid: user.uid, iconColor: Colors.black87),
             IconButton(
               tooltip: 'Sign out',
               icon: const Icon(Icons.logout),
@@ -656,8 +666,8 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                Color.fromARGB(255, 122, 210, 104),
-                Color.fromARGB(255, 137, 236, 113)
+                Color.fromARGB(255, 180, 157, 199),
+                Color.fromARGB(255, 185, 132, 210)
               ],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
@@ -677,3 +687,6 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
     );
   }
 }
+
+
+
