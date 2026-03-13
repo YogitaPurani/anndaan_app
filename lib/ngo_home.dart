@@ -242,9 +242,26 @@ class _NgoHomeScreenState extends State<NgoHomeScreen> {
           child: ListTile(
             leading: url == null
                 ? const Icon(Icons.fastfood, size: 40, color: Colors.orange)
-                : ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Image.network(url, width: 56, height: 56, fit: BoxFit.cover),
+                : GestureDetector(
+                    onTap: () => showDialog(
+                      context: context,
+                      builder: (_) => Dialog(
+                        backgroundColor: Colors.transparent,
+                        child: GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: InteractiveViewer(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(url, fit: BoxFit.contain),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.network(url, width: 56, height: 56, fit: BoxFit.cover),
+                    ),
                   ),
             title: Text('$title • $qty servings',
                 style: const TextStyle(fontWeight: FontWeight.bold)),

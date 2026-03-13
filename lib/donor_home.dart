@@ -112,9 +112,13 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
     final path = 'food_images/$uid/${DateTime.now().millisecondsSinceEpoch}.jpg';
     final ref = FirebaseStorage.instance.ref(path);
 
-    final uploadTask = ref.putFile(_imageFile!);
+    final bytes = await _imageFile!.readAsBytes();
+    final uploadTask = ref.putData(
+      bytes,
+      SettableMetadata(contentType: 'image/jpeg'),
+    );
     uploadTask.snapshotEvents.listen((s) {
-      if (s.totalBytes > 0) {
+      if (s.totalBytes > 0 && mounted) {
         setState(() => _uploadProgress = s.bytesTransferred / s.totalBytes);
       }
     });
